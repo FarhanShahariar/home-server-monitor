@@ -2,7 +2,7 @@ name: Home Server Monitor
 
 on:
   schedule:
-    - cron: "* * * * *"   # every minute (FREE)
+    - cron: "* * * * *"   # every minute
   workflow_dispatch:
 
 jobs:
@@ -10,7 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Load last status
+      - name: Restore last status
+        uses: actions/cache@v4
+        with:
+          path: status.txt
+          key: server-status
+
+      - name: Read last status
         id: last
         run: |
           if [ -f status.txt ]; then
@@ -19,21 +25,19 @@ jobs:
             echo "last=unknown" >> $GITHUB_OUTPUT
           fi
 
-      - name: Check server (SSH port 22)
+      - name: Ping server
         id: check
         run: |
-          if timeout 5 bash -c "</dev/tcp/${{ secrets.SERVER_IP }}/22" 2>/dev/null; then
-            CURRENT="online"
+          if ping -c 2 -W 3 ${{ secrets.SERVER_IP }} > /dev/null; then
+            echo "current=online" >> $GITHUB_OUTPUT
           else
-            CURRENT="offline"
+            echo "current=offline" >> $GITHUB_OUTPUT
           fi
-          echo "current=$CURRENT" >> $GITHUB_OUTPUT
 
-      - name: Notify Telegram on status change
+      - name: Send Telegram notification on change
         if: steps.check.outputs.current != steps.last.outputs.last
         run: |
-          STATUS="${{ steps.check.outputs.current }}"
-          if [ "$STATUS" = "offline" ]; then
+          if [ "${{ steps.check.outputs.current }}" = "offline" ]; then
             MSG="🚨 Ubuntu Server OFFLINE!"
           else
             MSG="✅ Ubuntu Server BACK ONLINE!"
@@ -43,5 +47,5 @@ jobs:
             -d chat_id=${{ secrets.CHAT_ID }} \
             -d text="$MSG"
 
-      - name: Save status
+      - name: Save current status
         run: echo "${{ steps.check.outputs.current }}" > status.txt
