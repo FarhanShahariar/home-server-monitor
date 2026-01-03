@@ -2,7 +2,7 @@ name: Home Server Monitor
 
 on:
   schedule:
-    - cron: "* * * * *"   # every minute
+    - cron: "* * * * *"   # runs every minute
   workflow_dispatch:
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
             echo "current=offline" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send Telegram notification on change
+      - name: Send Telegram notification
         if: steps.check.outputs.current != steps.last.outputs.last
         run: |
           if [ "${{ steps.check.outputs.current }}" = "offline" ]; then
