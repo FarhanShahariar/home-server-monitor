@@ -1,1 +1,57 @@
 
+name: Home Server Monitor
+
+on:
+  schedule:
+    - cron: '*/1 * * * *'
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Restore last status
+        uses: actions/cache@v4
+        with:
+          path: status.txt
+          key: server-status
+
+      - name: Check Server Status
+        id: check
+        run: |
+          if ping -c 3 ${{ secrets.SERVER_IP }} > /dev/null; then
+            CURRENT="online"
+          else
+            CURRENT="offline"
+          fi
+
+          LAST="unknown"
+          if [ -f status.txt ]; then
+            LAST=$(cat status.txt)
+          fi
+
+          echo "$CURRENT" > status.txt
+
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "last=$LAST" >> $GITHUB_OUTPUT
+
+      - name: Save status
+        uses: actions/cache@v4
+        with:
+          path: status.txt
+          key: server-status
+
+      - name: OFFLINE Alert
+        if: steps.check.outputs.current == 'offline' && steps.check.outputs.last != 'offline'
+        run: |
+          curl -s "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            -d chat_id=${{ secrets.CHAT_ID }} \
+            -d text="🚨 ALERT!\nHome Ubuntu Server is OFFLINE!\n🕒 $(date)"
+
+      - name: ONLINE Alert
+        if: steps.check.outputs.current == 'online' && steps.check.outputs.last == 'offline'
+        run: |
+          curl -s "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            -d chat_id=${{ secrets.CHAT_ID }} \
+            -d text="✅ RECOVERED!\nHome Ubuntu Server is BACK ONLINE!\n🕒 $(date)"
