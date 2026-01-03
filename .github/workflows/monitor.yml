@@ -10,13 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Restore last status
+      - name: Setup cache for last status
         uses: actions/cache@v4
         with:
           path: status.txt
           key: server-status
 
-      - name: Read last status
+      - name: Read last server status
         id: last
         run: |
           if [ -f status.txt ]; then
@@ -34,15 +34,15 @@ jobs:
             echo "current=offline" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send Telegram notification
+      - name: Send Telegram alert on status change
         if: steps.check.outputs.current != steps.last.outputs.last
         run: |
-          if [ "${{ steps.check.outputs.current }}" = "offline" ]; then
+          STATUS="${{ steps.check.outputs.current }}"
+          if [ "$STATUS" = "offline" ]; then
             MSG="🚨 Ubuntu Server OFFLINE!"
           else
             MSG="✅ Ubuntu Server BACK ONLINE!"
           fi
-
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
             -d chat_id=${{ secrets.CHAT_ID }} \
             -d text="$MSG"
