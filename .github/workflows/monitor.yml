@@ -1,9 +1,8 @@
-
 name: Home Server Monitor
 
 on:
   schedule:
-    - cron: '*/1 * * * *'
+    - cron: '*/1 * * * *'   # every minute
   workflow_dispatch:
 
 jobs:
@@ -11,11 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Restore last status
-        uses: actions/cache@v4
+      - name: Download last status artifact
+        uses: actions/download-artifact@v3
+        id: download
         with:
-          path: status.txt
-          key: server-status
+          name: server-status
+          path: ./status || true  # continue if artifact does not exist
+
+      - name: Set last status
+        id: last-status
+        run: |
+          if [ -f status/status.txt ]; then
+            LAST=$(cat status/status.txt)
+          else
+            LAST="online"
+          fi
+          echo "last=$LAST" >> $GITHUB_OUTPUT
 
       - name: Check Server Status
         id: check
@@ -26,32 +36,27 @@ jobs:
             CURRENT="offline"
           fi
 
-          LAST="unknown"
-          if [ -f status.txt ]; then
-            LAST=$(cat status.txt)
-          fi
-
-          echo "$CURRENT" > status.txt
+          mkdir -p status
+          echo "$CURRENT" > status/status.txt
 
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
-          echo "last=$LAST" >> $GITHUB_OUTPUT
-
-      - name: Save status
-        uses: actions/cache@v4
-        with:
-          path: status.txt
-          key: server-status
 
       - name: OFFLINE Alert
-        if: steps.check.outputs.current == 'offline' && steps.check.outputs.last != 'offline'
+        if: steps.check.outputs.current == 'offline' && steps.last-status.outputs.last != 'offline'
         run: |
           curl -s "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
             -d chat_id=${{ secrets.CHAT_ID }} \
             -d text="🚨 ALERT!\nHome Ubuntu Server is OFFLINE!\n🕒 $(date)"
 
       - name: ONLINE Alert
-        if: steps.check.outputs.current == 'online' && steps.check.outputs.last == 'offline'
+        if: steps.check.outputs.current == 'online' && steps.last-status.outputs.last == 'offline'
         run: |
           curl -s "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
             -d chat_id=${{ secrets.CHAT_ID }} \
             -d text="✅ RECOVERED!\nHome Ubuntu Server is BACK ONLINE!\n🕒 $(date)"
+
+      - name: Upload status artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: server-status
+          path: status/status.txt
